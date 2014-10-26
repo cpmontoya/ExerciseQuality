@@ -15,45 +15,71 @@ Many of the fields have a majority of blanks or NA Values. They correspond to st
 
 ```{r}
 library(caret,quietly=TRUE)
+split<-.2
 set.seed(203289)
-inBuild<- createDataPartition(y=analysisdata$classe,p=.6,list=FALSE)
+inBuild<- createDataPartition(y=analysisdata$classe,p=split,list=FALSE)
 validation<- analysisdata[-inBuild,]
 builddata<-analysisdata[inBuild,]
-inTrain<-createDataPartition(y=analysisdata$classe,p=.6,list=FALSE)
+inTrain<-createDataPartition(y=builddata$classe,p=split,list=FALSE)
 training<-builddata[inTrain,]
 testing<-builddata[-inTrain,]
+classeIndex<-grep("classe",names(training))
+#Figure 1
+featurePlot(training[,seq(1,classeIndex-1,13)],y=training$classe,plot="pairs",auto.key = list(columns = 5))
+corMat<-abs(cor(training[,-classeIndex]))
+diag(corMat) = 0
+highCor<-which(corMat>0.9, arr.ind=T)
+highCor<-highCor[order(highCor[,1]),]
+#Figure 2
+featurePlot(training[,c(1,4,8:10)],y=training$classe,plot="pairs",auto.key = list(columns = 5))
 ```
-
-## Training Models from the Data
-
+Looking through the featurePlots in pairs in Figure 1, there are a number of predictor combinations that show different structures for different classe values. They do not look even roughly linear however, so a tree algorithm such as random forests is likely to work better and more simply than linear regression models. In Figure 2 it seems that the classe values overlap considerably for the accel predictors and since they are highly correlated (over 90%) with other variables removing them should not hurt the analysis. The gyro predictors are also highly correlated but with each other rather than other predictors. 
+```{r}
+subSample<-createDataPartition(y=training$classe,p=.2,list=FALSE)
+modelFit <- train(training[subSample,]$classe~.,method="rf",data=training[subSample,-classeIndex],prox=TRUE)
+important<-varImp(modelFit)$importance
+training<-training[,-grep("accel",names(training))]
+testing<-testing[,-grep("accel",names(testing))]
+validation<-validation[,-grep("accel",names(validation))]
+classeIndex<-grep("classe",names(training))
+```
+Performing a random forest classification on a small subset of the data confirms that the accel variables are not the highest contributors to the classification. The most important predictor appears to be the roll_belt. Removing the accel predictors leaves `r dim(training)[2]`. The gyro predictors are also not strong contributors and as noted above they are strongly correlated with each other. Perhaps PCA could be done on a subset of predictors that are strongly correlated (over 70%) to further reduce the predictors needed.
+```{r}
+#exclude roll_Belt and classe
+corMat<-abs(cor(training[,-c(1,classeIndex)]))
+diag(corMat) = 0
+highCor<-which(corMat>0.5, arr.ind=T)
+highCor<-highCor[order(highCor[,1]),]
+highCor<-unique(highCor[,1])+1 #take unique indicies and add one since roll_Belt was excluded
+preProc <- preProcess(training[,highCor],method="pca",thresh=.95)
+trainPC <- predict(preProc,training[,highCor])
+dim(trainPC)
+training<-training[,-highCor]
+dim(training)
+training[names(trainPC)]<-trainPC
+testPC <- predict(preProc,testing[,highCor])
+testing<-testing[,-highCor]
+testing[names(testPC)]<-testPC
+valPC <- predict(preProc,validation[,highCor])
+validation<-validation[,-highCor]
+validation[names(valPC)]<-valPC
+classeIndex<-grep("classe",names(training))
+dim(training)
+```
+## Training Models and Applying to Test Data
 ```{r}
 classeIndex<-grep("classe",names(training))
 modelFit <- train(training$classe~.,method="rf",data=training[,-classeIndex],prox=TRUE)
 predictions<-predict(modelFit,testing[,-classeIndex])
 confusionMatrix(predictions,testing$classe)
 
-preProc <- preProcess(training[,-classeIndex],method="pca",thresh=.85)
-trainPC <- predict(preProc,training[,-classeIndex])
-length(trainPC)
-modelFit <- train(training$classe~.,method="rf",data=trainPC,prox=TRUE)
-testPC <- predict(preProc,testing[,-classeIndex])
-predictions<-predict(modelFit,testPC)
+classeIndex<-grep("classe",names(training))
+modelFit <- train(training$classe~.,method="rf",data=training[,-c(14,classeIndex)],prox=TRUE)
+predictions<-predict(modelFit,testing[,-classeIndex])
 confusionMatrix(predictions,testing$classe)
 
-preProc <- preProcess(training[,-classeIndex],method="pca",thresh=.9)
-trainPC <- predict(preProc,training[,-classeIndex])
-length(trainPC)
-modelFit <- train(training$classe~.,method="rf",data=trainPC,prox=TRUE)
-testPC <- predict(preProc,testing[,-classeIndex])
-predictions<-predict(modelFit,testPC)
+classeIndex<-grep("classe",names(training))
+modelFit <- train(training$classe~.,method="rf",data=training[,-c(14,20:dim(training)[2],classeIndex)],prox=TRUE)
+predictions<-predict(modelFit,testing[,-classeIndex])
 confusionMatrix(predictions,testing$classe)
-
-preProc <- preProcess(training[,-classeIndex],method="pca",thresh=.95)
-trainPC <- predict(preProc,training[,-classeIndex])
-length(trainPC)
-modelFit <- train(training$classe~.,method="rf",data=trainPC,prox=TRUE)
-testPC <- predict(preProc,testing[,-classeIndex])
-predictions<-predict(modelFit,testPC)
-confusionMatrix(predictions,testing$classe)
-
 ```

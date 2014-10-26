@@ -16,7 +16,44 @@ Many of the fields have a majority of blanks or NA Values. They correspond to st
 ```{r}
 library(caret,quietly=TRUE)
 set.seed(203289)
-inTrain<- createDataPartition(y=analysisdata$classe,p=.6,list=FALSE)
+inBuild<- createDataPartition(y=analysisdata$classe,p=.6,list=FALSE)
+validation<- analysisdata[-inBuild,]
+builddata<-analysisdata[inBuild,]
+inTrain<-createDataPartition(y=analysisdata$classe,p=.6,list=FALSE)
+training<-builddata[inTrain,]
+testing<-builddata[-inTrain,]
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+## Training Models from the Data
+
+```{r}
+classeIndex<-grep("classe",names(training))
+modelFit <- train(training$classe~.,method="rf",data=training[,-classeIndex],prox=TRUE)
+predictions<-predict(modelFit,testing[,-classeIndex])
+confusionMatrix(predictions,testing$classe)
+
+preProc <- preProcess(training[,-classeIndex],method="pca",thresh=.85)
+trainPC <- predict(preProc,training[,-classeIndex])
+length(trainPC)
+modelFit <- train(training$classe~.,method="rf",data=trainPC,prox=TRUE)
+testPC <- predict(preProc,testing[,-classeIndex])
+predictions<-predict(modelFit,testPC)
+confusionMatrix(predictions,testing$classe)
+
+preProc <- preProcess(training[,-classeIndex],method="pca",thresh=.9)
+trainPC <- predict(preProc,training[,-classeIndex])
+length(trainPC)
+modelFit <- train(training$classe~.,method="rf",data=trainPC,prox=TRUE)
+testPC <- predict(preProc,testing[,-classeIndex])
+predictions<-predict(modelFit,testPC)
+confusionMatrix(predictions,testing$classe)
+
+preProc <- preProcess(training[,-classeIndex],method="pca",thresh=.95)
+trainPC <- predict(preProc,training[,-classeIndex])
+length(trainPC)
+modelFit <- train(training$classe~.,method="rf",data=trainPC,prox=TRUE)
+testPC <- predict(preProc,testing[,-classeIndex])
+predictions<-predict(modelFit,testPC)
+confusionMatrix(predictions,testing$classe)
+
+```

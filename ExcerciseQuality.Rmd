@@ -15,7 +15,7 @@ Many of the fields have a majority of blanks or NA Values. They correspond to st
 
 ```{r}
 library(caret,quietly=TRUE)
-split<-.2
+split<-.1
 set.seed(203289)
 inBuild<- createDataPartition(y=analysisdata$classe,p=split,list=FALSE)
 validation<- analysisdata[-inBuild,]
@@ -52,34 +52,59 @@ highCor<-which(corMat>0.5, arr.ind=T)
 highCor<-highCor[order(highCor[,1]),]
 highCor<-unique(highCor[,1])+1 #take unique indicies and add one since roll_Belt was excluded
 preProc <- preProcess(training[,highCor],method="pca",thresh=.95)
+
 trainPC <- predict(preProc,training[,highCor])
-dim(trainPC)
 training<-training[,-highCor]
-dim(training)
 training[names(trainPC)]<-trainPC
+classeIndex<-grep("classe",names(training))
+classeInBack<- c(c(1:dim(training)[2])[-classeIndex],classeIndex)
+training<-training[,classeInBack]
+
 testPC <- predict(preProc,testing[,highCor])
 testing<-testing[,-highCor]
 testing[names(testPC)]<-testPC
+testing<-testing[,classeInBack]
+
 valPC <- predict(preProc,validation[,highCor])
 validation<-validation[,-highCor]
 validation[names(valPC)]<-valPC
-classeIndex<-grep("classe",names(training))
-dim(training)
+validation<-validation[,classeInBack]
 ```
-## Training Models and Applying to Test Data
+## Using Cross Validation to weed out more predictors
+Checking on which are the least important contributors to the accuracy on the training set we can systematically eliminate them and look at the accuracy on the testing set. Choosing the elimination scheme with best accuracy on the test set helps reduce the possibility of overfitting. I am only showing three to save time for presentation
+
 ```{r}
 classeIndex<-grep("classe",names(training))
 modelFit <- train(training$classe~.,method="rf",data=training[,-classeIndex],prox=TRUE)
 predictions<-predict(modelFit,testing[,-classeIndex])
 confusionMatrix(predictions,testing$classe)
+rmI<-c()
+vAcc<-confusionMatrix(predictions,testing$classe)$overall[1]
 
-classeIndex<-grep("classe",names(training))
-modelFit <- train(training$classe~.,method="rf",data=training[,-c(14,classeIndex)],prox=TRUE)
-predictions<-predict(modelFit,testing[,-classeIndex])
-confusionMatrix(predictions,testing$classe)
+important<-varImp(modelFit)$importance
+leastImport<-order(important['Overall'])
+bounds<- 1*1:3+4
 
-classeIndex<-grep("classe",names(training))
-modelFit <- train(training$classe~.,method="rf",data=training[,-c(14,20:dim(training)[2],classeIndex)],prox=TRUE)
-predictions<-predict(modelFit,testing[,-classeIndex])
-confusionMatrix(predictions,testing$classe)
+for(i in bounds){
+     removeIndexes <- -c(leastImport[1:i],classeIndex)
+     modelFitNw <- train(training$classe~.,method="rf",data=training[,removeIndexes],prox=TRUE)
+     predictions<-predict(modelFitNw,testing[,removeIndexes])
+     confusionMatrix(predictions,testing$classe)
+     if (confusionMatrix(predictions,testing$classe)$overall[1]>max(vAcc)){
+          modelFit<-modelFitNw
+          rmI<-removeIndexes
+     }
+     vAcc<-append(vAcc,confusionMatrix(predictions,testing$classe)$overall[1])
+}
+vAcc
+i<-which.max(vAcc)
+i
+removeIndexes <- rmI
 ```
+## Estimate of Accuracy 
+Taking the best choice of predictors determined from the previous step we can apply the fit to the validation set which the model has not seen yet. 
+```{r}
+#predictions<-predict(modelFit,validation[,removeIndexes])
+#confusionMatrix(predictions,validation$classe)
+```
+The estimate on accuracy is `r confusionMatrix(predictions,validation$classe)$overall[1]`. I needed to comment out the validation code and Ideally I would run with more data in the training set to achieve better accuracy as I did for submission but I was getting a script error with the Rmarkdown for the validation set that was not showing up in the regular script

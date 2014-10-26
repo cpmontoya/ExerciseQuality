@@ -1,0 +1,22 @@
+---
+title: "Exercise Activity Evaluation Analysis"
+output: html_document
+---
+
+This is an analysis of data collected to test the ability to classify the quality of activity performance. Links to the original data and a paper describing the experiment can be found at <http://groupware.les.inf.puc-rio.br/har>.   
+
+## Exploring and Pre-processing the Data
+A subset of the data was made available to the class for training and testing as well as a small set of data to submit predictions for grading. The first step was to load the data and take a look. 
+```{r}
+rawdata<-read.csv("pml-training.csv",head=TRUE)
+analysisdata<-rawdata[,-grep("kurtosis|skewness|max|min|avg|stddev|var|amplitude|X|window|user|timestamp",names(rawdata))]
+```
+Many of the fields have a majority of blanks or NA Values. They correspond to statistics such as mean and standard deviations calculated over varying time windows. These values will not be very useful for the predictions of classe, there are very few actual values and the data to evaluate for grading do not have any values for these fields. The user and time stamp data will not be useful either since the quality of exercise should not be related to the actual user per se or to the absolute time of the data. The time stamps could be useful for the relating the various observations, but again the data for submission is not sufficient to create time window statistics so all of these fields have been removed.
+
+```{r}
+library(caret,quietly=TRUE)
+set.seed(203289)
+inTrain<- createDataPartition(y=analysisdata$classe,p=.6,list=FALSE)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
